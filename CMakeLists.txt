@@ -6,5 +6,5 @@ target_sources(expression_parser PRIVATE
     src/main.c
     src/expression_parser/expression_parser.c
 )
-target_compile_options(expression_parser PRIVATE -Wall -Werror)
-target_link_libraries(expression_parser PRIVATE m)
+target_compile_options(expression_parser PRIVATE -Wall -Werror -fsanitize=address -fno-omit-frame-pointer)
+target_link_options(expression_parser PRIVATE -lm -fsanitize=address)

@@ -39,14 +39,15 @@ Node* create_number(Number number);
 Node* create_function(Function function);
 Node* create_operator(Operator operator);
 
-Node* parse(char* expression);
-double evaluate(Node* head, double x);
+Node* expression_parse(char* expression);
+double expression_evaluate(Node* head, double x);
+void expression_free(Node* head);
 
-void push(NodeStack* stack, Node* node);
-Node* pop(NodeStack* stack);
+void stack_push(NodeStack* stack, Node* node);
+Node* stack_pop(NodeStack* stack);
 
-double add(double a, double b);
-double subtract(double a, double b);
-double multiply(double a, double b);
-double divide(double a, double b);
-double cot(double x);
+double _add(double a, double b);
+double _sub(double a, double b);
+double _mul(double a, double b);
+double _div(double a, double b);
+double _cot(double x);
