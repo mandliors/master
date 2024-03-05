@@ -1,9 +1,38 @@
 #include "ExpressionParser.h"
+#include "Token.h"
+#include "DataStructures.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#include <stdbool.h>
+#include <assert.h>
+
+//suppoerted functions
+static inline double _sin(double x) { return sin(x); }
+static inline double _cos(double x) { return cos(x); }
+static inline double _tg(double x) { return tan(x); }
+static inline double _ctg(double x) { return 1.0 / tan(x); }
+static inline double _ln(double x) { return log(x); }
+static inline double _exp(double x) { return exp(x); }
+static inline double _abs(double x) { return fabs(x); }
+
+//function data
+typedef struct FunctionData {
+    char name[10];
+    double(*function)(double);
+} FunctionData;
+static FunctionData functions[FN_COUNT] = {
+    { "sin", _sin },
+    { "cos", _cos },
+    { "tg",  _tg },
+    { "ctg", _ctg },
+    { "ln",  _ln },
+    { "exp", _exp },
+    { "abs", _abs }
+};
 
 //supported operators
 static inline double _add(double a, double b) { return a + b; }
@@ -12,199 +41,229 @@ static inline double _mul(double a, double b) { return a * b; }
 static inline double _div(double a, double b) { return a / b; }
 static inline double _pow(double a, double b) { return pow(a, b); }
 
-//supported functions
-static inline double _sin(double x) { return sin(x); }
-static inline double _cos(double x) { return cos(x); }
-static inline double _tan(double x) { return tan(x); }
-static inline double _cot(double x) { return 1.0 / tan(x); }
-static inline double _ln(double x) { return log(x); }
-static inline double _exp(double x) { return exp(x); }
-static inline double _abs(double x) { return fabs(x); }
+//operator data
+typedef struct OperatorData {
+    char sign;
+    int precedence;
+    bool right_associative;
+    double(*function)(double, double);
+} OperatorData;
+static OperatorData operators[OP_COUNT] = {
+    { '+', 1, false, _add },
+    { '-', 1, false, _sub },
+    { '*', 2, false, _mul },
+    { '/', 2, false, _div },
+    { '^', 3, true,  _pow }
+};
 
-//helper functions
-static Token* create_variable(char variable);
-static Token* create_constant(double constant);
-static Token* create_function(const char* function);
-static Token* create_operator(char operator);
-
-//stack functions
-static void stack_push(TokenStack* stack, Token* node);
-static Token* stack_pop(TokenStack* stack);
+// hidden functions
+static bool expression_tokenize(Token* tokens[TOKEN_ARRAY_SIZE], size_t* n, const char* expression);
+static Token* expression_infix_to_postfix_to_tree(Token* tokens[TOKEN_ARRAY_SIZE], size_t n);
 
 //API functions
-Token* expression_tokenize(const char* expression)
+Token* expression_parse(const char* expression)
 {
+    Token* tokens[TOKEN_ARRAY_SIZE]; size_t n;
+    if (!expression_tokenize(tokens, &n, expression))
+        return NULL;
+    
+    Token* root = expression_infix_to_postfix_to_tree(tokens, n);
+    if (!root)
+        return NULL;
 
+    return root;
 }
-Token* expression_infix_to_postfix(Token* infix)
+double expression_evaluate(Token* root, double x)
 {
-    TokenStack stack; stack.top = -1;
-    Token* token = infix;
-    while (token != NULL)
-    {
-        if (strcmp(token, "x") == 0) //variable
-        {
-            Token* node = create_variable('x');
-            stack_push(&stack, node);
-        }
-        else if ((c = strpbrk("+-*/^", token)) != NULL) //operator
-        {
-            Token* node = create_operator(*c);
-            node->data.operator.right = stack_pop(&stack);
-            node->data.operator.left = stack_pop(&stack);
-            stack_push(&stack, node);
-        }
-        else if(strcmp(token, "sin") == 0) //function
-        {
-            Token* node = create_function(_sin);
-            Token* left = stack_pop(&stack);
-            node->left = left;
-            stack_push(&stack, node);
-        }
-        else if(strcmp(token, "cos") == 0)
-        {
-            Token* node = create_function(_cos);
-            Token* left = stack_pop(&stack);
-            node->left = left;
-            stack_push(&stack, node);
-        }
-        else if(strcmp(token, "tg") == 0 || strcmp(token, "tan") == 0)
-        {
-            Token* node = create_function(_tan);
-            Token* left = stack_pop(&stack);
-            node->left = left;
-            stack_push(&stack, node);
-        }
-        else if(strcmp(token, "ctg") == 0 || strcmp(token, "cot") == 0)
-        {
-            Token* node = create_function(_cot);
-            Token* left = stack_pop(&stack);
-            node->left = left;
-            stack_push(&stack, node);
-        }
-        else if(strcmp(token, "ln") == 0 || strcmp(token, "log") == 0)
-        {
-            Token* node = create_function(_ln);
-            Token* left = stack_pop(&stack);
-            node->left = left;
-            stack_push(&stack, node);
-        }
-        else if(strcmp(token, "exp") == 0)
-        {
-            Token* node = create_function(_exp);
-            Token* left = stack_pop(&stack);
-            node->left = left;
-            stack_push(&stack, node);
-        }
-        else if (strcmp(token, "abs") == 0)
-        {
-            Token* node = create_function(_abs);
-            Token* left = stack_pop(&stack);
-            node->left = left;
-            stack_push(&stack, node);
-        }
-        else //constant
-        {
-            Token* node = create_constant(atoi(token));
-            stack_push(&stack, node);
-        }
-        token = strtok(NULL, " ");
-    }
-    return stack.data[0];
-}
-
-double expression_evaluate(Token* head, double x)
-{
-    if (head == NULL)
+    if (root == NULL)
         return 0.0;
 
-    if (head->type == VARIABLE)
+    if (root->type == TT_VARIABLE)
         return x;
-    else if (head->type == CONSTANT)
-        return head->data.constant;
-    else if (head->type == OPERATOR)
-        return head->data.operator.operator(expression_evaluate(head->data.operator.left, x), expression_evaluate(head->data.operator.right, x));
+    else if (root->type == TT_CONSTANT)
+        return root->data.constant;
+    else if (root->type == TT_OPERATOR)
+        return operators[root->data.operator].function(expression_evaluate(root->left, x), expression_evaluate(root->right, x));
     else
-        return head->data.function.function(x);
+        return functions[root->data.function].function(expression_evaluate(root->left, x));
 }
-void expression_free(Token* head)
+void expression_free(Token* root)
 {
-    if (head != NULL)
+    if (root != NULL)
     {
-        switch (head->type)
-        {
-            case VARIABLE:
-            case CONSTANT:
-                break;
-            case FUNCTION:
-                expression_free(head->data.function.param);
-                break;
-            case OPERATOR:
-                expression_free(head->data.operator.left);
-                expression_free(head->data.operator.right);
-                break;
-        }
-        free(head);
+        free(root->left);
+        free(root->right);
+        free(root);
     }    
 }
+void expression_print(Token* root)
+{
+    if (root == NULL)
+        return;
 
-static Token* create_variable(char variable)
-{
-    Token* node = (Token*)malloc(sizeof(Token));
-    node->type = VARIABLE;
-    node->data.variable = variable;
-    return node;
-}
-static Token* create_constant(double constant)
-{
-    Token* node = (Token*)malloc(sizeof(Token));
-    node->type = CONSTANT;
-    node->data.constant = constant;
-    return node;
-}
-static Token* create_function(const char* function)
-{
-    Function func = { NULL, NULL };
-    if (strcmp(function, "sin") == 0) func.function = _sin;
-    else if (strcmp(function, "cos") == 0) func.function = _cos;
-    else if (strcmp(function, "tan") == 0 || strcmp(function, "tg") == 0) func.function = _tan;
-    else if (strcmp(function, "cot") == 0 || strcmp(function, "ctg") == 0) func.function = _cot;
-    else if (strcmp(function, "ln") == 0 || strcmp(function, "log") == 0) func.function = _ln;
-    else if (strcmp(function, "exp") == 0) func.function = _exp;
-    else if (strcmp(function, "abs") == 0) func.function = _abs;
-    else return NULL;
-
-    Token* node = (Token*)malloc(sizeof(Token));
-    node->type = FUNCTION;
-    node->data.function = func;
-    return node;
-}
-static Token* create_operator(char operator)
-{
-    Operator op = { NULL, NULL, NULL };
-    switch (operator)
+    switch (root->type)
     {
-        case '+': op.operator = _add; break;
-        case '-': op.operator = _sub; break;
-        case '*': op.operator = _mul; break;
-        case '/': op.operator = _div; break;
-        case '^': op.operator = _pow; break;
-        default: return NULL;
+        case TT_CONSTANT:
+            printf("%g ", root->data.constant);
+            break;
+        case TT_VARIABLE:
+            printf("%c ", root->data.variable);
+            break;
+        case TT_OPERATOR:
+            expression_print(root->left);
+            printf("%c ", operators[root->data.operator].sign);
+            expression_print(root->right);
+            break;
+        case TT_FUNCTION:
+            printf("%s ", functions[root->data.function].name);
+            expression_print(root->left);
+            break;    
+        default:
+            break;
+    }
+}
+
+static bool expression_tokenize(Token* tokens[TOKEN_ARRAY_SIZE], size_t* n, const char* expression)
+{
+    *n = 0; char c; size_t i = 0;
+    while ((c = expression[i++]) != '\0')
+    {
+        if (c == ' ') continue;
+        if (isalpha(c)) // function or variable
+        {
+            char buffer[10];
+            size_t j = 0;
+            do
+            {
+                buffer[j++] = c;
+                c = expression[i++];
+            } while (isalpha(c));
+            buffer[j] = '\0'; i--;
+            
+            // check if it's a function, operator or variable
+            if (j == 1) // variable or operator
+            {
+                Token* token = create_operator(buffer[0]);
+                if (token != NULL) // operator
+                    tokens[(*n)++] = token;
+                else // variable
+                    tokens[(*n)++] = create_variable(buffer[0]);
+            }
+            else // function
+            {
+                Token* token = create_function(buffer);
+                if (token != NULL)
+                    tokens[(*n)++] = token;
+                else
+                    return false;
+            }
+        }
+        else if (isdigit(c)) // constant
+        {
+            char buffer[10];
+            size_t j = 0;
+            do
+            {
+                buffer[j++] = c;
+                c = expression[i++];
+                if (c == ',') c = '.'; // comma can also be used as decimal point
+            } while (isdigit(c) || c == '.');
+            buffer[j] = '\0'; i--;
+            tokens[(*n)++] = create_constant(atof(buffer));
+        }
+        else // operator or parenthesis
+        {
+            if (c == '(' || c == ')') // parenthesis
+                tokens[(*n)++] = create_operator(c);
+            else
+            {
+                Token* token = create_operator(c);
+                if (token != NULL)
+                    tokens[(*n)++] = token;
+                else
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+static Token* expression_infix_to_postfix_to_tree(Token* tokens[TOKEN_ARRAY_SIZE], size_t n)
+{
+    // infix to postfix (shunting yard algorithm)
+    TokenStack stack = stack_create();
+    TokenQueue output = queue_create();
+    for (size_t i = 0; i < n; i++)
+    {
+        Token* token = tokens[i];
+        if (token->type == TT_CONSTANT || token->type == TT_VARIABLE)
+            queue_enqueue(&output, token);
+        else if (token->type == TT_FUNCTION)
+            stack_push(&stack, token);
+        else if (token->type == TT_OPERATOR)
+        {
+            if (token->data.operator == OP_LEFT_PARENTHESIS) // left parenthesis
+                stack_push(&stack, token);
+            else if (token->data.operator == OP_RIGHT_PARENTHESIS) // right parenthesis
+            {
+                Token* top;
+                while ((top = stack_top(&stack))->type != TT_OPERATOR || top->data.operator != OP_LEFT_PARENTHESIS)
+                {
+                    assert(!stack_is_empty(&stack));
+                    queue_enqueue(&output, stack_pop(&stack));
+                }
+                assert(stack_top(&stack)->type == TT_OPERATOR && stack_top(&stack)->data.operator == OP_LEFT_PARENTHESIS);
+                token_destroy(stack_pop(&stack));
+                if (!stack_is_empty(&stack) && stack_top(&stack)->type == TT_FUNCTION)
+                    queue_enqueue(&output, stack_pop(&stack));
+                token_destroy(token);
+            }
+            else // operator
+            {
+                Token* top;
+                while (!stack_is_empty(&stack) && (top = stack_top(&stack))->type == TT_OPERATOR && 
+                        top->data.operator != OP_LEFT_PARENTHESIS &&
+                        (operators[top->data.operator].precedence > operators[token->data.operator].precedence ||
+                        (operators[top->data.operator].precedence == operators[token->data.operator].precedence && !operators[token->data.operator].right_associative)))
+
+                { 
+                    queue_enqueue(&output, stack_pop(&stack));
+                }
+                stack_push(&stack, token);
+            }
+        }
+    }
+    while (!stack_is_empty(&stack))
+    {
+        assert(stack_top(&stack)->type != TT_OPERATOR || stack_top(&stack)->data.operator != OP_LEFT_PARENTHESIS);
+        queue_enqueue(&output, stack_pop(&stack));
     }
 
-    Token* node = (Token*)malloc(sizeof(Token));
-    node->type = OPERATOR;
-    node->data.operator = op;
-    return node;
-}
-
-static void stack_push(TokenStack* stack, Token* node)
-{
-    if (stack->top == STACK_SIZE - 1) exit(1);
-    stack->data[++stack->top] = node;
-}
-static Token* stack_pop(TokenStack* stack)
-{
-    if (stack->top < 0) exit(1);
-    return stack->data[stack->top--];
+    // create expression tree
+    TokenStack treeStack = stack_create();
+    Token* token;
+    while (!queue_is_empty(&output))
+    {
+        token = queue_dequeue(&output);
+        if (token->type == TT_CONSTANT || token->type == TT_VARIABLE)
+            stack_push(&treeStack, token);
+        else if (token->type == TT_OPERATOR)
+        {
+            if (token->data.operator == OP_LEFT_PARENTHESIS || token->data.operator == OP_RIGHT_PARENTHESIS)
+                return NULL;
+            else
+            {
+                token->right = stack_pop(&treeStack);
+                token->left = stack_pop(&treeStack);
+                stack_push(&treeStack, token);
+            }
+        }
+        else if (token->type == TT_FUNCTION)
+        {
+            token->left = stack_pop(&treeStack);
+            stack_push(&treeStack, token);
+        }
+        else
+            return NULL;
+    }
+    return stack_pop(&treeStack);
 }

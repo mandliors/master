@@ -4,9 +4,9 @@ project(ExpressionParser)
 add_executable(ExpressionParser)
 target_sources(ExpressionParser PRIVATE
     src/main.c
+    src/ExpressionParser/Token.c
     src/ExpressionParser/ExpressionParser.c
-    src/ExpressionParser/TokenList.c
-    src/ExpressionParser/TokenStack.c
+    src/ExpressionParser/DataStructures.c
 )
 #target_compile_options(expression_parser PRIVATE -Wall -Werror -fsanitize=address -fno-omit-frame-pointer)
 #target_link_options(expression_parser PRIVATE -lm -fsanitize=address)
